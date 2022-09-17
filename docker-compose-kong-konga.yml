@@ -1,0 +1,86 @@
+version: '3.9'
+services:
+  kong:
+    image: kong:latest
+    container_name: kong
+    ports:
+      - 8000:8000
+      - 8443:8443
+      - 8001:8001
+      - 8444:8444
+    networks:
+      - kong-network
+    environment:
+      - "KONG_PROXY_ACCESS_LOG=/dev/stdout"
+      - "KONG_ADMIN_ACCESS_LOG=/dev/stdout"
+      - "KONG_PROXY_ERROR_LOG=/dev/stderr"
+      - "KONG_ADMIN_ERROR_LOG=/dev/stderr"
+      - "KONG_ADMIN_LISTEN=0.0.0.0:8001, 0.0.0.0:8444 ssl"
+      - "KONG_DATABASE=postgres"
+      - "KONG_PG_HOST=kong-db"
+      - "KONG_PG_USER=kong"
+      - "KONG_PG_PASSWORD=kong"
+      - "KONG_CASSANDRA_CONTACT_POINTS=kong-db"
+    depends_on:
+      - "kong-migrate"
+    restart: "on-failure:3"
+
+  kong-migrate:
+    image: kong:latest
+    container_name: kong-migrate
+    depends_on:
+      - "kong-db"
+    networks:
+      - kong-network
+    environment:
+      KONG_DATABASE: "postgres"
+      KONG_PG_HOST: "kong-db"
+      KONG_PG_USER: "kong"
+      KONG_PG_PASSWORD: "kong"
+      KONG_CASSANDRA_CONTACT_POINTS: "kong-db"
+    command: "kong migrations bootstrap"
+    restart: "on-failure:3"
+
+  kong-db:
+    image: "postgres:9.6"
+    container_name: kong-db
+    environment:
+      POSTGRES_USER: "kong"
+      POSTGRES_PASSWORD: "kong"
+      POSTGRES_DB: "kong"
+    networks:
+      - kong-network
+    volumes:
+      - ./kong_data:/var/lib/postgresql/data
+
+  konga:
+    image: pantsel/konga
+    container_name: konga
+    ports:
+      - 1337:1337
+    networks:
+      - kong-network
+    environment:
+      - "DB_ADAPTER=postgres"
+      - "DB_HOST=konga-db"
+      - "DB_USER=konga"
+      - "DB_PASSWORD=konga"
+    restart: "on-failure:3"
+    depends_on:
+      - konga-db
+  
+
+  konga-db:
+    image: "postgres:9.6"
+    container_name: konga-db
+    environment:
+      POSTGRES_USER: "konga"
+      POSTGRES_PASSWORD: "konga"
+      POSTGRES_DB: "konga"
+    networks:
+      - kong-network
+    volumes:
+      - ./konga_data:/var/lib/postgresql/data
+networks:
+  kong-network: 
+     driver: bridge
